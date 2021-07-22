@@ -2,6 +2,7 @@ package com.github.aleperaltabazas.cola
 
 import com.github.aleperaltabazas.cola.actors.*
 import com.github.aleperaltabazas.cola.extensions.words
+import com.github.aleperaltabazas.cola.message.ChannelHandler
 import com.typesafe.config.ConfigFactory
 import dev.kord.core.Kord
 import dev.kord.core.entity.Message
@@ -23,12 +24,11 @@ fun main() = runBlocking {
     Spark.port(port)
     Spark.get("/*") { _, _ -> "I feel fantastic and I'm still alive" }
 
-    val queue = queueActor()
-
     val config = ConfigFactory.load()
     val client = Kord(config.getString("discord.bot.token"))
-
     val supportedCommands = listOf("!queue")
+
+    val queue = queueActor(ChannelHandler(config))
 
     client.on<MessageCreateEvent> {
         if (supportedCommands.none { message.content.startsWith(it) }) return@on

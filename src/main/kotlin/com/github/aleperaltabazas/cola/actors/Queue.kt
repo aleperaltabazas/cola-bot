@@ -1,9 +1,8 @@
 package com.github.aleperaltabazas.cola.actors
 
-import arrow.core.computations.nullable
+import com.github.aleperaltabazas.cola.message.ChannelHandler
 import com.github.aleperaltabazas.cola.user.User
 import dev.kord.core.entity.Message
-import dev.kord.core.entity.ReactionEmoji
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ObsoleteCoroutinesApi
 import kotlinx.coroutines.channels.actor
@@ -51,129 +50,120 @@ class QueueHelp(message: Message) : QueueMessage(message) {
 }
 
 @OptIn(ObsoleteCoroutinesApi::class)
-fun CoroutineScope.queueActor() = actor<QueueMessage> {
+fun CoroutineScope.queueActor(handler: ChannelHandler) = actor<QueueMessage> {
     val queues: MutableMap<String, Queue<User>> = mutableMapOf()
-    val okHand = ReactionEmoji.Unicode("\uD83D\uDC4C")
+
 
     fun Queue<User>.pretty(indent: Int = 0) = joinToString("\n") { "${" ".repeat(indent)}- ${it.userId}" }
 
     for (msg in channel) {
-        msg.log()
-        suspend fun queueAlreadyExists(queue: String) {
-            msg.message.channel.createMessage("Queue **$queue** already exists!")
-        }
+        handler(msg.message) {
+            suspend fun queueAlreadyExists(queue: String) {
+                sendMessage("Queue **$queue** already exists!")
+            }
 
-        suspend fun queueDoesNotExist(queue: String) {
-            msg.message.channel.createMessage("Queue **$queue** does not exist!")
-        }
+            suspend fun queueDoesNotExist(queue: String) {
+                sendMessage("Queue **$queue** does not exist!")
+            }
 
-        when (msg) {
-            is CreateQueue -> nullable {
-                val author = msg.message.getAuthorAsUser().bind()
+            msg.log()
 
-                if (!author.isAdmin()) return@nullable
+            when (msg) {
+                is CreateQueue -> {
+                    val author = author()
+                    guard(author.isAdmin())
 
-                queues[msg.queueName]
-                    ?.let { queueAlreadyExists(msg.queueName) }
-                    ?: run {
-                        queues[msg.queueName] = LinkedList()
-                        msg.message.addReaction(okHand)
+                    queues[msg.queueName]
+                        ?.let { queueAlreadyExists(msg.queueName) }
+                        ?: run {
+                            queues[msg.queueName] = LinkedList()
+                            ack()
+                        }
+                }
+                is JoinQueue -> {
+                    val queue = guardNotNull(queues[msg.queueName]) {
+                        queueDoesNotExist(msg.queueName)
                     }
-            }
-            is JoinQueue -> nullable {
-                val queue = queues[msg.queueName] ?: run {
-                    queueDoesNotExist(msg.queueName)
-                    return@nullable
+                    val author = author()
+
+                    queue.takeUnless { it.contains(author) }?.add(author)
+                    ack()
                 }
-                val author = msg.message.getAuthorAsUser().bind()
-
-                queue.takeUnless { it.contains(author) }?.add(author)
-                msg.message.addReaction(okHand)
-            }
-            is LeaveQueue -> nullable {
-                val queue = queues[msg.queueName] ?: run {
-                    queueDoesNotExist(msg.queueName)
-                    return@nullable
-                }
-                val author = msg.message.getAuthorAsUser().bind()
-
-                queue.takeIf { it.contains(author) }?.remove(author)
-                msg.message.addReaction(okHand)
-            }
-            is PopQueue -> nullable {
-                val queue = queues[msg.queueName] ?: run {
-                    queueDoesNotExist(msg.queueName)
-                    return@nullable
-                }
-                val author = msg.message.getAuthorAsUser().bind()
-
-                if (!author.isAdmin()) return@nullable
-
-                val next = queue.poll()
-                if (next == null) msg.message.channel.createMessage("Queue **${msg.queueName}** is empty!")
-                else msg.message.channel.createMessage("@${next.userId} - you're up!")
-            }
-            is QueueStatus -> nullable {
-                val queue = queues[msg.queueName] ?: run {
-                    queueDoesNotExist(msg.queueName)
-                    return@nullable
-                }
-                val author = msg.message.getAuthorAsUser().bind()
-                if (!author.isAdmin()) return@nullable
-
-                if (queue.isEmpty()) msg.message.channel.createMessage("Queue **${msg.queueName}** is empty")
-                else {
-                    val message = queue.pretty(indent = 4)
-                    msg.message.channel.createMessage("${msg.queueName}\n$message")
-                }
-            }
-            is DeleteQueue -> nullable {
-                queues[msg.queueName] ?: run {
-                    queueDoesNotExist(msg.queueName)
-                    return@nullable
-                }
-
-                val author = msg.message.getAuthorAsUser().bind()
-                if (!author.isAdmin()) return@nullable
-
-                queues.remove(msg.queueName)
-                msg.message.addReaction(okHand)
-            }
-            is ListQueues -> nullable {
-                val author = msg.message.getAuthorAsUser().bind()
-                if (!author.isAdmin()) return@nullable
-
-                if (queues.isEmpty()) msg.message.channel.createMessage("No queues have been created yet")
-                else {
-                    val message = queues.toList().joinToString("\n") { (listName, users) ->
-                        "**$listName\n**${users.pretty(4)}"
+                is LeaveQueue -> {
+                    val queue = guardNotNull(queues[msg.queueName]) {
+                        queueDoesNotExist(msg.queueName)
                     }
-                    msg.message.channel.createMessage(message)
-                }
-            }
-            is QueueHelp -> {
-                val message = """
-                    ```!queue delete q - delete queue 'q' (if it exists)
-                    !queue help     - show this text message
-                    !queue join q   - join queue 'q' (if you're not already in it)
-                    !queue leave q  - leave queue 'q' (if you're already in it)
-                    !queue list     - show all existing queues along with users awaiting in each
-                    !queue next q   - call the next user in queue 'q' in
-                    !queue new q    - create new queue 'q'
-                    !queue status q - show the state of queue 'q' along with users waiting in it```
-                """.trimIndent()
+                    val author = author()
 
-                msg.message.channel.createMessage(message)
+                    queue.takeIf { it.contains(author) }?.remove(author)
+                    ack()
+                }
+                is PopQueue -> {
+                    val queue = guardNotNull(queues[msg.queueName]) {
+                        queueDoesNotExist(msg.queueName)
+                    }
+                    val author = author()
+                    guard(author.isAdmin())
+
+                    val next = queue.poll()
+                    if (next == null) sendMessage("Queue **${msg.queueName}** is empty!")
+                    else sendMessage("@${next.userId} - you're up!")
+                }
+                is QueueStatus -> {
+                    val queue = guardNotNull(queues[msg.queueName]) {
+                        queueDoesNotExist(msg.queueName)
+                    }
+                    val author = author()
+                    guard(author.isAdmin())
+
+                    if (queue.isEmpty()) sendMessage("Queue **${msg.queueName}** is empty")
+                    else {
+                        val message = queue.pretty(indent = 4)
+                        sendMessage("${msg.queueName}\n$message")
+                    }
+                }
+                is DeleteQueue -> {
+                    guard(queues.containsKey(msg.queueName)) {
+                        queueDoesNotExist(msg.queueName)
+                    }
+
+                    val author = author()
+                    guard(author.isAdmin())
+
+                    queues.remove(msg.queueName)
+                    ack()
+                }
+                is ListQueues -> {
+                    val author = author()
+                    guard(author.isAdmin())
+
+                    if (queues.isEmpty()) sendMessage("No queues have been created yet")
+                    else {
+                        val message = queues.toList().joinToString("\n") { (listName, users) ->
+                            "**$listName\n**${users.pretty(4)}"
+                        }
+                        sendMessage(message)
+                    }
+                }
+                is QueueHelp -> {
+                    val message = """
+                        ```!queue delete q - delete queue 'q' (if it exists)
+                        !queue help     - show this text message
+                        !queue join q   - join queue 'q' (if you're not already in it)
+                        !queue leave q  - leave queue 'q' (if you're already in it)
+                        !queue list     - show all existing queues along with users awaiting in each
+                        !queue next q   - call the next user in queue 'q' in
+                        !queue new q    - create new queue 'q'
+                        !queue status q - show the state of queue 'q' along with users waiting in it```
+                    """.trimIndent()
+
+                    sendMessage(message)
+                }
             }
         }
+
     }
 }
 
-private fun Message.getAuthorAsUser(): User? = author?.let { a ->
-    User(
-        userId = "${a.username}#${a.discriminator}",
-        roles = emptyList(),
-    )
-}
 
 private val LOGGER = LoggerFactory.getLogger("QueueActor")
