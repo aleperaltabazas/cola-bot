@@ -245,11 +245,11 @@
                 <configuration>
                     <jdkVersion>1.8</jdkVersion>
                     <!-- Use your own application name -->
-                    <appName>lucius-gate</appName>
+                    <appName>benito-stg</appName>
                     <processTypes>
                         <!-- Tell Heroku how to launch your application -->
                         <!-- You might have to remove the ./ in front   -->
-                        <web>java -jar target/brave-bot-jar-with-dependencies.jar</web>
+                        <web>java -jar target/cola-bot-jar-with-dependencies.jar</web>
                     </processTypes>
                 </configuration>
             </plugin>
