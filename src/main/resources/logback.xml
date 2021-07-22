@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<configuration scan="false">
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                %d{ISO8601}{GMT} %-5level [%X{requestId}] [%X{dexClient}] [%X{motive}] [%thread] %logger{0}: %msg %n
+            </pattern>
+        </encoder>
+    </appender>
+
+    <logger name="com.github.aleperaltabazas.brave" level="DEBUG"/>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+
+</configuration>
