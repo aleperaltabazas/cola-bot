@@ -2,7 +2,7 @@ package com.github.aleperaltabazas.cola.message
 
 import com.github.aleperaltabazas.cola.constants.OK_HAND
 import com.github.aleperaltabazas.cola.extensions.getAuthorAsUser
-import com.github.aleperaltabazas.cola.user.User
+import com.github.aleperaltabazas.cola.model.User
 import dev.kord.core.entity.Message
 import dev.kord.core.entity.ReactionEmoji
 
@@ -28,6 +28,9 @@ sealed class HandlerStrategy(
     suspend fun author(): User = guardNotNull(message.getAuthorAsUser())
 
     suspend fun ack() = react(OK_HAND)
+
+    val channelId: String
+        get() = message.channel.id.asString
 }
 
 class ProdStrategy(
@@ -41,7 +44,7 @@ class ProdStrategy(
 }
 
 class FakeStrategy(
-    message: Message
+    message: Message,
 ) : HandlerStrategy(message) {
     private val actions: MutableList<Action> = mutableListOf()
 

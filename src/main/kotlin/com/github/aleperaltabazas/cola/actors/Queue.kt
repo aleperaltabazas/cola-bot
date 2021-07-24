@@ -1,7 +1,8 @@
 package com.github.aleperaltabazas.cola.actors
 
 import com.github.aleperaltabazas.cola.message.ChannelHandler
-import com.github.aleperaltabazas.cola.user.User
+import com.github.aleperaltabazas.cola.model.ChannelQueues
+import com.github.aleperaltabazas.cola.model.User
 import dev.kord.core.entity.Message
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ObsoleteCoroutinesApi
@@ -51,8 +52,7 @@ class QueueHelp(message: Message) : QueueMessage(message) {
 
 @OptIn(ObsoleteCoroutinesApi::class)
 fun CoroutineScope.queueActor(handler: ChannelHandler) = actor<QueueMessage> {
-    val queues: MutableMap<String, Queue<User>> = mutableMapOf()
-
+    val queues = ChannelQueues()
 
     fun Queue<User>.pretty(indent: Int = 0) = joinToString("\n") { "${" ".repeat(indent)}- ${it.userId}" }
 
@@ -73,15 +73,15 @@ fun CoroutineScope.queueActor(handler: ChannelHandler) = actor<QueueMessage> {
                     val author = author()
                     guard(author.isAdmin())
 
-                    queues[msg.queueName]
+                    queues.get(channelId, msg.queueName)
                         ?.let { queueAlreadyExists(msg.queueName) }
                         ?: run {
-                            queues[msg.queueName] = LinkedList()
+                            queues.new(channelId, msg.queueName)
                             ack()
                         }
                 }
                 is JoinQueue -> {
-                    val queue = guardNotNull(queues[msg.queueName]) {
+                    val queue = guardNotNull(queues.get(channelId, msg.queueName)) {
                         queueDoesNotExist(msg.queueName)
                     }
                     val author = author()
@@ -90,7 +90,7 @@ fun CoroutineScope.queueActor(handler: ChannelHandler) = actor<QueueMessage> {
                     ack()
                 }
                 is LeaveQueue -> {
-                    val queue = guardNotNull(queues[msg.queueName]) {
+                    val queue = guardNotNull(queues.get(channelId, msg.queueName)) {
                         queueDoesNotExist(msg.queueName)
                     }
                     val author = author()
@@ -99,7 +99,7 @@ fun CoroutineScope.queueActor(handler: ChannelHandler) = actor<QueueMessage> {
                     ack()
                 }
                 is PopQueue -> {
-                    val queue = guardNotNull(queues[msg.queueName]) {
+                    val queue = guardNotNull(queues.get(channelId, msg.queueName)) {
                         queueDoesNotExist(msg.queueName)
                     }
                     val author = author()
@@ -110,7 +110,7 @@ fun CoroutineScope.queueActor(handler: ChannelHandler) = actor<QueueMessage> {
                     else sendMessage("@${next.userId} - you're up!")
                 }
                 is QueueStatus -> {
-                    val queue = guardNotNull(queues[msg.queueName]) {
+                    val queue = guardNotNull(queues.get(channelId, msg.queueName)) {
                         queueDoesNotExist(msg.queueName)
                     }
                     val author = author()
@@ -123,23 +123,24 @@ fun CoroutineScope.queueActor(handler: ChannelHandler) = actor<QueueMessage> {
                     }
                 }
                 is DeleteQueue -> {
-                    guard(queues.containsKey(msg.queueName)) {
+                    guard(queues.exists(channelId, msg.queueName)) {
                         queueDoesNotExist(msg.queueName)
                     }
 
                     val author = author()
                     guard(author.isAdmin())
 
-                    queues.remove(msg.queueName)
+                    queues.delete(channelId, msg.queueName)
                     ack()
                 }
                 is ListQueues -> {
                     val author = author()
                     guard(author.isAdmin())
 
-                    if (queues.isEmpty()) sendMessage("No queues have been created yet")
+                    val queue = guardNotNull(queues.get(channelId))
+                    if (queue.isEmpty()) sendMessage("No queues have been created yet")
                     else {
-                        val message = queues.toList().joinToString("\n") { (listName, users) ->
+                        val message = queue.toList().joinToString("\n") { (listName, users) ->
                             "**$listName\n**${users.pretty(4)}"
                         }
                         sendMessage(message)

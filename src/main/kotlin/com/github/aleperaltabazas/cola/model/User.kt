@@ -1,4 +1,4 @@
-package com.github.aleperaltabazas.cola.user
+package com.github.aleperaltabazas.cola.model
 
 data class User(
     val userId: String,
