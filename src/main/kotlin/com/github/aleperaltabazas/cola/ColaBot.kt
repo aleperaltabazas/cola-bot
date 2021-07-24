@@ -3,6 +3,7 @@ package com.github.aleperaltabazas.cola
 import com.github.aleperaltabazas.cola.actors.*
 import com.github.aleperaltabazas.cola.extensions.words
 import com.github.aleperaltabazas.cola.message.ChannelHandler
+import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import dev.kord.core.Kord
 import dev.kord.core.entity.Message
@@ -12,6 +13,9 @@ import kotlinx.coroutines.ObsoleteCoroutinesApi
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import spark.Spark
+
+val CONFIG: Config = ConfigFactory.load()
+val ADMIN_ROLE: String = CONFIG.getString("queue.manager.role")
 
 @OptIn(ObsoleteCoroutinesApi::class)
 fun main() = runBlocking {
@@ -24,11 +28,10 @@ fun main() = runBlocking {
     Spark.port(port)
     Spark.get("/*") { _, _ -> "I feel fantastic and I'm still alive" }
 
-    val config = ConfigFactory.load()
-    val client = Kord(config.getString("discord.bot.token"))
+    val client = Kord(CONFIG.getString("discord.bot.token"))
     val supportedCommands = listOf("!queue")
 
-    val queue = queueActor(ChannelHandler(config))
+    val queue = queueActor(ChannelHandler(CONFIG))
 
     client.on<MessageCreateEvent> {
         if (supportedCommands.none { message.content.startsWith(it) }) return@on

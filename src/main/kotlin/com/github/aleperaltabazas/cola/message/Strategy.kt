@@ -50,8 +50,8 @@ class FakeStrategy(
 
     sealed class Action
 
-    class SendMessage(content: String) : Action()
-    class React(emoji: ReactionEmoji.Unicode) : Action()
+    data class SendMessage(val content: String) : Action()
+    data class React(val emoji: ReactionEmoji.Unicode) : Action()
 
     override suspend fun react(emoji: ReactionEmoji.Unicode) {
         actions.add(React(emoji))
