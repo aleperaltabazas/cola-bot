@@ -6,7 +6,10 @@ import kotlinx.coroutines.flow.toList
 
 suspend fun Message.getAuthorAsUser(): User? = author?.let { a ->
     User(
-        userId = "${a.username}#${a.discriminator}",
+        id = a.id.asString,
+        discriminator = a.discriminator,
+        username = "${a.username}#${a.discriminator}",
         roles = getAuthorAsMember()?.roles?.toList()?.map { it.name } ?: emptyList(),
+        serverNickname = getAuthorAsMember()?.nickname,
     )
 }

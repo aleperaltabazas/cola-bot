@@ -50,11 +50,12 @@ class QueueHelp(message: Message) : QueueMessage(message) {
     override val action: String = "help"
 }
 
+// TODO. might be wise to consider a structure a bit more complex to use DI or something like that for better testing
+//  and extensibility
 @OptIn(ObsoleteCoroutinesApi::class)
 fun CoroutineScope.queueActor(handler: ChannelHandler) = actor<QueueMessage> {
     val queues = ChannelQueues()
-
-    fun Queue<User>.pretty(indent: Int = 0) = joinToString("\n") { "${" ".repeat(indent)}- ${it.userId}" }
+    fun Queue<User>.pretty(indent: Int = 0) = joinToString("\n") { "${" ".repeat(indent)}- ${it.username}" }
 
     for (msg in channel) {
         handler(msg.message) {
@@ -107,14 +108,12 @@ fun CoroutineScope.queueActor(handler: ChannelHandler) = actor<QueueMessage> {
 
                     val next = queue.poll()
                     if (next == null) sendMessage("Queue **${msg.queueName}** is empty!")
-                    else sendMessage("@${next.userId} - you're up!")
+                    else sendMessage("<@${next.id}> - you're up!")
                 }
                 is QueueStatus -> {
                     val queue = guardNotNull(queues.get(channelId, msg.queueName)) {
                         queueDoesNotExist(msg.queueName)
                     }
-                    val author = author()
-                    guard(author.isAdmin())
 
                     if (queue.isEmpty()) sendMessage("Queue **${msg.queueName}** is empty")
                     else {
@@ -134,9 +133,6 @@ fun CoroutineScope.queueActor(handler: ChannelHandler) = actor<QueueMessage> {
                     ack()
                 }
                 is ListQueues -> {
-                    val author = author()
-                    guard(author.isAdmin())
-
                     val queue = guardNotNull(queues.get(channelId))
                     if (queue.isEmpty()) sendMessage("No queues have been created yet")
                     else {
