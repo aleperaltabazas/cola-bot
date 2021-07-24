@@ -12,7 +12,7 @@ import java.util.*
 
 sealed class QueueMessage(val message: Message) {
     fun log() {
-        LOGGER.info("${message.author?.username}: $action")
+        LOGGER.info("Channel[${message.channel.id.asString}] - User[${message.author?.username}]: $action")
     }
 
     protected abstract val action: String
