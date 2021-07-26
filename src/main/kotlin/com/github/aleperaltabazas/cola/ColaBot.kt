@@ -5,12 +5,24 @@ import com.github.aleperaltabazas.cola.extensions.words
 import com.github.aleperaltabazas.cola.message.ChannelHandler
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
+import dev.kord.common.Color
+import dev.kord.common.entity.Overwrite
+import dev.kord.common.entity.OverwriteType
+import dev.kord.common.entity.Permissions
+import dev.kord.common.entity.Snowflake
 import dev.kord.core.Kord
+import dev.kord.core.behavior.createRole
+import dev.kord.core.behavior.createTextChannel
 import dev.kord.core.entity.Message
+import dev.kord.core.event.guild.GuildCreateEvent
+import dev.kord.core.event.guild.InviteCreateEvent
 import dev.kord.core.event.message.MessageCreateEvent
 import dev.kord.core.on
 import kotlinx.coroutines.ObsoleteCoroutinesApi
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import org.slf4j.LoggerFactory
 import spark.Spark
 
@@ -43,6 +55,25 @@ fun main() = runBlocking {
         } catch (e: Exception) {
             LOGGER.error("An error occurred", e)
             message.channel.createMessage("Beep boop andá a mirar a los logs")
+        }
+    }
+
+    client.on<GuildCreateEvent> {
+        if (!this.guild.channels.toList().any { it.name == "queues" }) {
+            this.guild.createTextChannel("queues") {
+                this.permissionOverwrites.add(
+                    Overwrite(
+                        id = Snowflake(Clock.System.now()),
+                        type = OverwriteType.Role,
+                        allow = Permissions(""),
+                        deny = Permissions("")
+                    )
+                )
+            }
+            this.guild.createRole {
+                name = "queue-manager"
+                color = Color(149, 16, 241)
+            }
         }
     }
 
