@@ -1,33 +1,31 @@
 package com.github.aleperaltabazas.cola
 
 import com.github.aleperaltabazas.cola.actors.*
+import com.github.aleperaltabazas.cola.extensions.addRoleOverwrite
 import com.github.aleperaltabazas.cola.extensions.words
 import com.github.aleperaltabazas.cola.message.ChannelHandler
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import dev.kord.common.Color
-import dev.kord.common.entity.Overwrite
-import dev.kord.common.entity.OverwriteType
+import dev.kord.common.entity.Permission
 import dev.kord.common.entity.Permissions
-import dev.kord.common.entity.Snowflake
 import dev.kord.core.Kord
+import dev.kord.core.any
 import dev.kord.core.behavior.createRole
 import dev.kord.core.behavior.createTextChannel
 import dev.kord.core.entity.Message
 import dev.kord.core.event.guild.GuildCreateEvent
-import dev.kord.core.event.guild.InviteCreateEvent
 import dev.kord.core.event.message.MessageCreateEvent
 import dev.kord.core.on
 import kotlinx.coroutines.ObsoleteCoroutinesApi
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import org.slf4j.LoggerFactory
 import spark.Spark
 
 val CONFIG: Config = ConfigFactory.load()
 val ADMIN_ROLE: String = CONFIG.getString("queue.manager.role")
+const val QUEUES = "queues"
 
 @OptIn(ObsoleteCoroutinesApi::class)
 fun main() = runBlocking {
@@ -46,6 +44,7 @@ fun main() = runBlocking {
     val queue = queueActor(ChannelHandler(CONFIG))
 
     client.on<MessageCreateEvent> {
+        if (message.getChannel().data.name.value != QUEUES) return@on
         if (supportedCommands.none { message.content.startsWith(it) }) return@on
         if (message.author?.isBot == true) return@on
 
@@ -59,20 +58,39 @@ fun main() = runBlocking {
     }
 
     client.on<GuildCreateEvent> {
-        if (!this.guild.channels.toList().any { it.name == "queues" }) {
-            this.guild.createTextChannel("queues") {
-                this.permissionOverwrites.add(
-                    Overwrite(
-                        id = Snowflake(Clock.System.now()),
-                        type = OverwriteType.Role,
-                        allow = Permissions(""),
-                        deny = Permissions("")
+        val role = if (!this.guild.roles.any { it.name == ADMIN_ROLE }) this.guild.createRole {
+            name = ADMIN_ROLE
+            color = Color(149, 16, 241)
+        } else this.guild.roles.toList().find { it.name == ADMIN_ROLE }!!
+
+        if (!guild.getMember(client.selfId).roles.any { it.id == role.id }) {
+            guild.getMember(client.selfId).addRole(role.id)
+        }
+
+        if (!this.guild.channels.toList().any { it.name == QUEUES }) {
+            this.guild.createTextChannel(QUEUES) {
+                val everyone = guild.getEveryoneRole()
+                addRoleOverwrite(role.id) {
+                    this.allowed = Permissions(
+                        Permission.ManageMessages,
+                        Permission.ReadMessageHistory,
+                        Permission.ManageChannels,
+                        Permission.SendMessages,
                     )
-                )
-            }
-            this.guild.createRole {
-                name = "queue-manager"
-                color = Color(149, 16, 241)
+                }
+
+                addRoleOverwrite(everyone.id) {
+                    this.denied = Permissions(
+                        Permission.ManageMessages,
+                        Permission.ManageChannels,
+                        Permission.SendMessages,
+                        Permission.UseExternalEmojis,
+                    )
+                    this.allowed = Permissions(
+                        Permission.ReadMessageHistory,
+                        Permission.AddReactions,
+                    )
+                }
             }
         }
     }
