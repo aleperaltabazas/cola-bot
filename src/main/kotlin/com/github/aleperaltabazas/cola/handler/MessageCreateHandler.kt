@@ -2,10 +2,10 @@ package com.github.aleperaltabazas.cola.handler
 
 import com.github.aleperaltabazas.cola.QUEUES
 import com.github.aleperaltabazas.cola.actors.CreateQueue
+import com.github.aleperaltabazas.cola.actors.QueueActor
 import com.github.aleperaltabazas.cola.actors.QueueMessage
 import com.github.aleperaltabazas.cola.extensions.getAuthorAsUser
 import com.github.aleperaltabazas.cola.extensions.words
-import com.github.aleperaltabazas.cola.types.Actor
 import dev.kord.core.Kord
 import dev.kord.core.entity.Message
 import dev.kord.core.event.message.MessageCreateEvent
@@ -13,7 +13,7 @@ import dev.kord.core.on
 import org.slf4j.LoggerFactory
 
 class MessageCreateHandler(
-    private val queuesActor: Actor<QueueMessage>,
+    private val queuesActor: QueueActor,
     private val client: Kord,
 ) : DiscordMessageHandler {
     override fun register() {

@@ -2,17 +2,17 @@ package com.github.aleperaltabazas.cola.handler
 
 import com.github.aleperaltabazas.cola.QUEUES
 import com.github.aleperaltabazas.cola.actors.LeaveQueue
+import com.github.aleperaltabazas.cola.actors.QueueActor
 import com.github.aleperaltabazas.cola.actors.QueueMessage
 import com.github.aleperaltabazas.cola.constants.PLUS
 import com.github.aleperaltabazas.cola.extensions.getAuthorAsUser
-import com.github.aleperaltabazas.cola.types.Actor
 import dev.kord.core.Kord
 import dev.kord.core.event.message.ReactionRemoveEvent
 import dev.kord.core.on
 import org.slf4j.LoggerFactory
 
 class ReactionDeleteHandler(
-    private val queuesActor: Actor<QueueMessage>,
+    private val queuesActor: QueueActor,
     private val client: Kord,
 ) : DiscordMessageHandler {
     override fun register() {

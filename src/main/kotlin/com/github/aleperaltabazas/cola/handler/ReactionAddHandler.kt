@@ -1,22 +1,18 @@
 package com.github.aleperaltabazas.cola.handler
 
 import com.github.aleperaltabazas.cola.QUEUES
-import com.github.aleperaltabazas.cola.actors.DeleteQueue
-import com.github.aleperaltabazas.cola.actors.JoinQueue
-import com.github.aleperaltabazas.cola.actors.PopQueue
-import com.github.aleperaltabazas.cola.actors.QueueMessage
+import com.github.aleperaltabazas.cola.actors.*
 import com.github.aleperaltabazas.cola.constants.BOOM
 import com.github.aleperaltabazas.cola.constants.NEXT
 import com.github.aleperaltabazas.cola.constants.PLUS
 import com.github.aleperaltabazas.cola.extensions.getAuthorAsUser
-import com.github.aleperaltabazas.cola.types.Actor
 import dev.kord.core.Kord
 import dev.kord.core.event.message.ReactionAddEvent
 import dev.kord.core.on
 import org.slf4j.LoggerFactory
 
 class ReactionAddHandler(
-    private val queuesActor: Actor<QueueMessage>,
+    private val queuesActor: QueueActor,
     private val client: Kord,
 ) : DiscordMessageHandler {
     override fun register() {

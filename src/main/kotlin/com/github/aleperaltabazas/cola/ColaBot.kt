@@ -1,6 +1,6 @@
 package com.github.aleperaltabazas.cola
 
-import com.github.aleperaltabazas.cola.actors.queueActor
+import com.github.aleperaltabazas.cola.actors.QueueActor
 import com.github.aleperaltabazas.cola.handler.GuildCreateHandler
 import com.github.aleperaltabazas.cola.handler.MessageCreateHandler
 import com.github.aleperaltabazas.cola.handler.ReactionAddHandler
@@ -8,6 +8,7 @@ import com.github.aleperaltabazas.cola.handler.ReactionDeleteHandler
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import dev.kord.core.Kord
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.ObsoleteCoroutinesApi
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
@@ -31,10 +32,9 @@ fun main() = runBlocking {
         Spark.get("/*") { _, _ -> "I feel fantastic and I'm still alive" }
     }
 
-
     // If this starts growing, consider using dependency injection
     val client = Kord(CONFIG.getString("discord.bot.token"))
-    val queuesActor = queueActor()
+    val queuesActor = QueueActor(this)
 
     val handlers = listOf(
         GuildCreateHandler(
