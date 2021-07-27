@@ -1,8 +1,14 @@
 package com.github.aleperaltabazas.cola.actors
 
+import com.github.aleperaltabazas.cola.constants.BOOM
+import com.github.aleperaltabazas.cola.constants.NEXT
+import com.github.aleperaltabazas.cola.constants.PLUS
 import com.github.aleperaltabazas.cola.message.ChannelHandler
 import com.github.aleperaltabazas.cola.model.ChannelQueues
 import com.github.aleperaltabazas.cola.model.User
+import dev.kord.common.entity.Snowflake
+import dev.kord.core.behavior.channel.MessageChannelBehavior
+import dev.kord.core.behavior.edit
 import dev.kord.core.entity.Message
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ObsoleteCoroutinesApi
@@ -10,155 +16,116 @@ import kotlinx.coroutines.channels.actor
 import org.slf4j.LoggerFactory
 import java.util.*
 
-sealed class QueueMessage(val message: Message) {
+sealed class QueueMessage(val channel: MessageChannelBehavior, val author: User) {
     fun log() {
-        LOGGER.info("Channel[${message.channel.id.asString}] - User[${message.author?.username}]: $action")
+        LOGGER.info("Channel[$channelId] - User[${author.username}]: $action")
     }
 
     protected abstract val action: String
+
+    val channelId = channel.id.asString
 }
 
-class CreateQueue(val queueName: String, message: Message) : QueueMessage(message) {
+class CreateQueue(
+    val queueName: String,
+    channel: MessageChannelBehavior,
+    author: User,
+    val message: Message,
+) : QueueMessage(channel, author) {
     override val action = "create queue $queueName"
 }
 
-class JoinQueue(val queueName: String, message: Message) : QueueMessage(message) {
-    override val action = "enqueue queue $queueName"
+class JoinQueue(val messageId: String, channel: MessageChannelBehavior, author: User) : QueueMessage(channel, author) {
+    override val action = "enqueue queue $messageId"
 }
 
-class LeaveQueue(val queueName: String, message: Message) : QueueMessage(message) {
-    override val action = ""
+class LeaveQueue(val messageId: String, channel: MessageChannelBehavior, author: User) : QueueMessage(channel, author) {
+    override val action = "leave queue $messageId"
 }
 
-class PopQueue(val queueName: String, message: Message) : QueueMessage(message) {
-    override val action = "pop queue $queueName"
+class PopQueue(val messageId: String, channel: MessageChannelBehavior, author: User) : QueueMessage(channel, author) {
+    override val action = "pop queue $messageId"
 }
 
-class QueueStatus(val queueName: String, message: Message) : QueueMessage(message) {
-    override val action = "queue status $queueName"
-}
-
-class DeleteQueue(val queueName: String, message: Message) : QueueMessage(message) {
-    override val action = "delete queue $queueName"
-}
-
-class ListQueues(message: Message) : QueueMessage(message) {
-    override val action = "list queues"
-}
-
-class QueueHelp(message: Message) : QueueMessage(message) {
-    override val action: String = "help"
+class DeleteQueue(val messageId: String, channel: MessageChannelBehavior, author: User) : QueueMessage(channel, author) {
+    override val action = "delete queue $messageId"
 }
 
 // TODO. might be wise to consider a structure a bit more complex to use DI or something like that for better testing
 //  and extensibility
 @OptIn(ObsoleteCoroutinesApi::class)
-fun CoroutineScope.queueActor(handler: ChannelHandler) = actor<QueueMessage> {
+fun CoroutineScope.queueActor() = actor<QueueMessage> {
     val queues = ChannelQueues()
     fun Queue<User>.pretty(indent: Int = 0) = joinToString("\n") { "${" ".repeat(indent)}- ${it.username}" }
 
     for (msg in channel) {
-        handler(msg.message) {
-            suspend fun queueAlreadyExists(queue: String) {
-                sendMessage("Queue **$queue** already exists!")
-            }
+        msg.log()
 
-            suspend fun queueDoesNotExist(queue: String) {
-                sendMessage("Queue **$queue** does not exist!")
-            }
-
-            msg.log()
-
+        ChannelHandler {
             when (msg) {
                 is CreateQueue -> {
-                    val author = author()
+                    val author = msg.author
                     guard(author.isAdmin())
 
-                    queues.get(channelId, msg.queueName)
-                        ?.let { queueAlreadyExists(msg.queueName) }
-                        ?: run {
-                            queues.new(channelId, msg.queueName)
-                            ack()
-                        }
+                    guard(!queues.exists(msg.channelId, msg.queueName)) {
+                        msg.message.delete()
+                    }
+
+                    val queueMessage = msg.message.channel.createMessage(msg.queueName)
+                    val queue = queues.new(msg.channelId, queueMessage, msg.queueName)
+                    queueMessage.edit {
+                        content = "**${msg.queueName}**\n${queue.pretty(4)}"
+                    }
+                    queueMessage.addReaction(PLUS)
+                    queueMessage.addReaction(NEXT)
+                    queueMessage.addReaction(BOOM)
+                    msg.message.delete()
                 }
                 is JoinQueue -> {
-                    val queue = guardNotNull(queues.get(channelId, msg.queueName)) {
-                        queueDoesNotExist(msg.queueName)
-                    }
-                    val author = author()
+                    val queue = guardNotNull(queues.getByMessageId(msg.channelId, msg.messageId))
+                    val author = msg.author
 
                     queue.takeUnless { it.contains(author) }?.add(author)
-                    ack()
+                    queue.message.edit {
+                        content = "**${queue.queueName}**\n${queue.pretty(4)}"
+                    }
                 }
                 is LeaveQueue -> {
-                    val queue = guardNotNull(queues.get(channelId, msg.queueName)) {
-                        queueDoesNotExist(msg.queueName)
-                    }
-                    val author = author()
+                    val queue = guardNotNull(queues.getByMessageId(msg.channelId, msg.messageId))
+                    val author = msg.author
 
                     queue.takeIf { it.contains(author) }?.remove(author)
-                    ack()
+                    queues.get(msg.channelId)
+                    queue.message.edit {
+                        content = "**${queue.queueName}**\n${queue.pretty(4)}"
+                    }
                 }
                 is PopQueue -> {
-                    val queue = guardNotNull(queues.get(channelId, msg.queueName)) {
-                        queueDoesNotExist(msg.queueName)
-                    }
-                    val author = author()
+                    val queue = guardNotNull(queues.getByMessageId(msg.channelId, msg.messageId))
+                    val author = msg.author
+                    queue.message.deleteReaction(Snowflake(msg.author.id), NEXT)
                     guard(author.isAdmin())
 
                     val next = queue.poll()
-                    if (next == null) sendMessage("Queue **${msg.queueName}** is empty!")
-                    else sendMessage("<@${next.id}> - you're up!")
-                }
-                is QueueStatus -> {
-                    val queue = guardNotNull(queues.get(channelId, msg.queueName)) {
-                        queueDoesNotExist(msg.queueName)
-                    }
-
-                    if (queue.isEmpty()) sendMessage("Queue **${msg.queueName}** is empty")
-                    else {
-                        val message = queue.pretty(indent = 4)
-                        sendMessage("${msg.queueName}\n$message")
+                    if (next == null) msg.channel.createMessage("Queue **${msg.messageId}** is empty!")
+                    else msg.channel.createMessage("<@${next.id}> - you're up!")
+                    queue.message.deleteReaction(Snowflake(next.id), PLUS)
+                    queue.message.edit {
+                        content = "**${queue.queueName}**\n${queue.pretty(4)}"
                     }
                 }
                 is DeleteQueue -> {
-                    guard(queues.exists(channelId, msg.queueName)) {
-                        queueDoesNotExist(msg.queueName)
-                    }
+                    val queue = guardNotNull(queues.getByMessageId(msg.channelId, msg.messageId))
 
-                    val author = author()
+                    val author = msg.author
                     guard(author.isAdmin())
 
-                    queues.delete(channelId, msg.queueName)
-                    ack()
-                }
-                is ListQueues -> {
-                    val queue = guardNotNull(queues.get(channelId))
-                    if (queue.isEmpty()) sendMessage("No queues have been created yet")
-                    else {
-                        val message = queue.toList().joinToString("\n") { (listName, users) ->
-                            "**$listName\n**${users.pretty(4)}"
-                        }
-                        sendMessage(message)
-                    }
-                }
-                is QueueHelp -> {
-                    val message = """
-                        ```!queue delete q - delete queue 'q' (if it exists)
-                        !queue help     - show this text message
-                        !queue join q   - join queue 'q' (if you're not already in it)
-                        !queue leave q  - leave queue 'q' (if you're already in it)
-                        !queue list     - show all existing queues along with users awaiting in each
-                        !queue next q   - call the next user in queue 'q' in
-                        !queue new q    - create new queue 'q'
-                        !queue status q - show the state of queue 'q' along with users waiting in it```
-                    """.trimIndent()
-
-                    sendMessage(message)
+                    queues.delete(msg.channelId, msg.messageId)
+                    queue.message.delete()
                 }
             }
-        }
 
+        }
     }
 }
 

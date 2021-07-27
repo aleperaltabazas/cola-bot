@@ -1,9 +1,12 @@
 package com.github.aleperaltabazas.cola
 
 import com.github.aleperaltabazas.cola.actors.*
+import com.github.aleperaltabazas.cola.constants.BOOM
+import com.github.aleperaltabazas.cola.constants.NEXT
+import com.github.aleperaltabazas.cola.constants.PLUS
 import com.github.aleperaltabazas.cola.extensions.addRoleOverwrite
+import com.github.aleperaltabazas.cola.extensions.getAuthorAsUser
 import com.github.aleperaltabazas.cola.extensions.words
-import com.github.aleperaltabazas.cola.message.ChannelHandler
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import dev.kord.common.Color
@@ -16,6 +19,8 @@ import dev.kord.core.behavior.createTextChannel
 import dev.kord.core.entity.Message
 import dev.kord.core.event.guild.GuildCreateEvent
 import dev.kord.core.event.message.MessageCreateEvent
+import dev.kord.core.event.message.ReactionAddEvent
+import dev.kord.core.event.message.ReactionRemoveEvent
 import dev.kord.core.on
 import kotlinx.coroutines.ObsoleteCoroutinesApi
 import kotlinx.coroutines.flow.toList
@@ -40,8 +45,10 @@ fun main() = runBlocking {
 
     val client = Kord(CONFIG.getString("discord.bot.token"))
     val supportedCommands = listOf("!queue")
+    val supportedAddReactions = listOf(PLUS, NEXT, BOOM)
+    val supportedRemoveReactions = listOf(PLUS)
 
-    val queue = queueActor(ChannelHandler(CONFIG))
+    val queue = queueActor()
 
     client.on<MessageCreateEvent> {
         if (message.getChannel().data.name.value != QUEUES) return@on
@@ -50,6 +57,34 @@ fun main() = runBlocking {
 
         try {
             val command = message.cheapParseCommand()
+            if (command != null) queue.send(command)
+        } catch (e: Exception) {
+            LOGGER.error("An error occurred", e)
+            message.channel.createMessage("Beep boop andá a mirar a los logs")
+        }
+    }
+
+    client.on<ReactionAddEvent> {
+        if (message.getChannel().data.name.value != QUEUES) return@on
+        if (emoji !in supportedAddReactions) return@on
+        if (getUserOrNull()?.isBot == true) return@on
+
+        try {
+            val command = parseCommand()
+            if (command != null) queue.send(command)
+        } catch (e: Exception) {
+            LOGGER.error("An error occurred", e)
+            message.channel.createMessage("Beep boop andá a mirar a los logs")
+        }
+    }
+
+    client.on<ReactionRemoveEvent> {
+        if (message.getChannel().data.name.value != QUEUES) return@on
+        if (emoji !in supportedRemoveReactions) return@on
+        if (getUserOrNull()?.isBot == true) return@on
+
+        try {
+            val command = parseCommand()
             if (command != null) queue.send(command)
         } catch (e: Exception) {
             LOGGER.error("An error occurred", e)
@@ -68,7 +103,14 @@ fun main() = runBlocking {
         }
 
         if (!this.guild.channels.toList().any { it.name == QUEUES }) {
-            this.guild.createTextChannel(QUEUES) {
+            val helpMessage = """
+                > `!queue new <queueName>` to create a new queue if it doesn't exist
+                > React with ${PLUS.name} to the message to join the queue. Delete said reaction to leave the queue.
+                > To advance the queue, react with the ${NEXT.name} emoji. To delete the queue, react with the ${BOOM.name} emoji.
+                        """.trimIndent()
+
+            val channel = this.guild.createTextChannel(QUEUES) {
+                this.topic = "queues"
                 val everyone = guild.getEveryoneRole()
                 addRoleOverwrite(role.id) {
                     this.allowed = Permissions(
@@ -92,31 +134,55 @@ fun main() = runBlocking {
                     )
                 }
             }
+            channel.createMessage(helpMessage)
         }
     }
 
     client.login()
 }
 
-// TODO: use a fucking parser combinator
-private fun Message.cheapParseCommand(): QueueMessage? {
-    return content.words()
-        .takeIf { (main) -> main == "!queue" }
-        ?.takeUnless { it.size < 2 }
-        ?.drop(1)
-        ?.let { words ->
-            when (words[0]) {
-                "delete" -> DeleteQueue(queueName = words[1], message = this)
-                "help" -> QueueHelp(this)
-                "leave" -> LeaveQueue(queueName = words[1], message = this)
-                "list" -> ListQueues(message = this)
-                "join" -> JoinQueue(queueName = words[1], message = this)
-                "next" -> PopQueue(queueName = words[1], message = this)
-                "new" -> CreateQueue(queueName = words[1], message = this)
-                "status" -> QueueStatus(queueName = words[1], message = this)
-                else -> null
-            }
+private suspend fun Message.cheapParseCommand(): QueueMessage? = content.words()
+    .takeIf { (main) -> main == "!queue" }
+    ?.takeUnless { it.size < 2 }
+    ?.drop(1)
+    ?.let { words ->
+        when (words[0]) {
+            "new" -> CreateQueue(
+                queueName = words[1],
+                message = this,
+                author = this.getAuthorAsUser()!!,
+                channel = this.channel,
+            )
+            else -> null
         }
+    }
+
+private suspend fun ReactionAddEvent.parseCommand(): QueueMessage? = when (emoji) {
+    PLUS -> JoinQueue(
+        messageId = this.messageId.asString,
+        channel = channel,
+        author = getAuthorAsUser()!!,
+    )
+    NEXT -> PopQueue(
+        messageId = this.messageId.asString,
+        channel = channel,
+        author = getAuthorAsUser()!!,
+    )
+    BOOM -> DeleteQueue(
+        messageId = this.messageId.asString,
+        channel = channel,
+        author = getAuthorAsUser()!!,
+    )
+    else -> null
+}
+
+private suspend fun ReactionRemoveEvent.parseCommand(): QueueMessage? = when (emoji) {
+    PLUS -> LeaveQueue(
+        messageId = this.messageId.asString,
+        channel = channel,
+        author = getAuthorAsUser()!!,
+    )
+    else -> null
 }
 
 private val LOGGER = LoggerFactory.getLogger("ColaBot")
