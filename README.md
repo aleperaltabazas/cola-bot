@@ -23,12 +23,13 @@ Bot sencillo para manejar colas
 * ¿Cómo lo levanto?
 
 Necesitás Maven, Kotlin, y un token de discord. El token lo tenés que poner en `src/main/resources/sensitive.conf`:
+
 ```
 discord.bot.token="mi-token"
 ```
 
-Y después de eso `mvn clean package` para armar el jar, y lo corrés con `java -jar/cola-bit-with-dependencies.jar`. 
-En cualquier caso, si te da mucha paja hacer esto, podés simplemente agregar el bot que ya está corriendo.
+Y después de eso `mvn clean package` para armar el jar, y lo corrés con `java -jar/cola-bit-with-dependencies.jar`. En
+cualquier caso, si te da mucha paja hacer esto, podés simplemente agregar el bot que ya está corriendo.
 
 * ¿Como bija lo agrego?
 

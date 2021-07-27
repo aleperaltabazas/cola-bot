@@ -1,7 +1,5 @@
 package com.github.aleperaltabazas.cola.message
 
-import com.typesafe.config.Config
-import dev.kord.core.entity.Message
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 
